@@ -29,6 +29,10 @@ class GPU_Sample_Lib:
         sample_gamma = dll.sample_gamma
         sample_gamma.argtypes = [ctypes.c_float, ctypes.c_float, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
         self._sample_gamma = sample_gamma
+        
+        sample_multi_gamma = dll.sample_multi_gamma
+        sample_multi_gamma.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+        self._sample_multi_gamma = sample_multi_gamma
 
         sample_multinomial = dll.sample_multinomial
         sample_multinomial.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
@@ -60,6 +64,9 @@ class GPU_Sample_Lib:
 
     def sample_gamma(self, shape, scale, sst):
         self._sample_gamma(shape, scale, sst, self.status, 0)
+            
+    def sample_multi_gamma(self, shape, scale, sst, repeat_times):
+        self._sample_multi_gamma(shape, scale, sst, self.status, repeat_times, 0)
 
     def sample_normal(self, sst):
         self._sample_normal(sst, self.status)
