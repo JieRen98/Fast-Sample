@@ -1042,7 +1042,11 @@ extern "C" void sync() {
 }
 
 int main(int argc, char** argv) {
-    size_t nElm = 2048 * 8 * 4;
+    int repeat = 2;
+    size_t matrix_scale = 2048 * 8 * 4;
+    size_t nElm = matrix_scale * repeat;
+    
+    //size_t nElm = 2048 * 8 * 4;
     unsigned int REP = 1;
 
     int seed = 5;
@@ -1053,6 +1057,16 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < 16; i++)
         multinomial_para[i] = 1. / 16;
 
+    float* shape_host = (float*)malloc(matrix_scale * sizeof(float));
+    float* scale_host = (float*)malloc(matrix_scale * sizeof(float));
+    for (int i = 0; i < matrix_scale; i++) {
+        scale_host[i] = (float)(1);    
+
+        //shape_host[i] = (float)(2);
+        shape_host[i] = (float)(0.01);
+        //shape_host[i] = (float)(1);
+    }
+    
     void* sst, * status;
     status = init(seed);
     sst = init_substorage(nElm);
@@ -1062,6 +1076,7 @@ int main(int argc, char** argv) {
     cudaEventCreate(&end);
     cudaEventRecord(start);
     for (size_t i = 0; i < REP; i++)
+        sample_multi_gamma(shape_host, scale_host, sst, status, repeat);
         //sample_gamma(2.0, 2.0, sst, status);
         //sample_uniform(sst, status);
         //sample_crt(0.5, 16, sst, status);
