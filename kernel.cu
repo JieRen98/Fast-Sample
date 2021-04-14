@@ -352,6 +352,91 @@ __global__ void _gamma_s1(float shape, float scale, float* output, float* unifor
     output[idx] = ret * scale;
 }
 
+__global__ void _rand_gamma(float *shape, float *scale, float* output, float* normal, float* uniform,size_t matrix_scale, curandStateXORWOW_t* status, cudaStream_t stream = 0) {
+    size_t idx = threadIdx.x + blockDim.x * blockIdx.x;
+    size_t matrix_idx = idx % matrix_scale;
+    float sh = shape[matrix_idx];
+    float sc = scale[matrix_idx];
+    //printf("%f", sh);
+    if (sh > 1.0) {
+        float d = sh - one_third;
+        float c = one_third / sqrt(d);
+        size_t state_idx = idx % (nStatus * nStatus_res_size);
+        bool accept = false;
+        float result;
+
+        float n = normal[idx]; // (sst->meta_working)[idx];  
+        float u = uniform[idx]; // (sst->special_reserve)[idx];     
+        float ocn = 1 + c * n;
+        while (ocn <= 0.0) {
+            n = curand_normal(&status[state_idx + nStatus * 2]);
+            ocn = 1 + c * n;
+        }
+        float ocn_pow3 = ocn * ocn * ocn;
+        if (u < 1.0 - 0.0331 * (n * n) * (n * n) || logf(u) < 0.5 * n * n + d * (1. - ocn_pow3 + logf(ocn_pow3))) {
+            result = d * ocn_pow3 * sc;
+            accept = true;
+        }
+
+        while (!accept) {
+            n = curand_normal(&status[state_idx + nStatus * 2]);
+            u = curand_uniform(&status[state_idx + nStatus * 2]);
+            ocn = 1 + c * n;
+            while (ocn <= 0.0) {
+                n = n = curand_normal(&status[state_idx + nStatus * 2]);
+                ocn = 1 + c * n;
+            }
+            ocn_pow3 = ocn * ocn * ocn;
+            if (u < 1.0 - 0.0331 * (n * n) * (n * n) || logf(u) < 0.5 * n * n + d * (1. - ocn_pow3 + logf(ocn_pow3))) {
+                result = d * ocn_pow3 * sc;
+                accept = true;
+            }
+        }
+        output[idx] = result; //(sst->output)[idx] = result;
+    }
+    else if (sh < 1) {
+        size_t state_idx = idx % nStatus;
+        float u = *(uniform + idx);
+        float e = -logf(u) * 1.0; //exponential
+        u = curand_uniform(&status[state_idx]);
+        float ret, tmp;
+        bool accept = false;
+
+        if (u <= 1.0 - sh) {
+            ret = powf(u, 1. / sh);
+            if (ret <= e)
+                accept = true;
+        }
+        else {
+            tmp = -logf((1 - u) / sh);
+            ret = powf(1.0 - sh + sh * tmp, 1. / sh);
+            if (ret <= (e + tmp))
+                accept = true;
+        }
+
+        while (!accept) {
+            u = curand_uniform(&status[state_idx + nStatus * 2]);
+            e = -logf(curand_uniform(&status[state_idx + nStatus * 3]));
+            if (u <= 1.0 - sh) {
+                ret = powf(u, 1. / sh);
+                if (ret <= e)
+                    accept = true;
+            }
+            else {
+                tmp = -logf((1 - u) / sh);
+                ret = powf(1.0 - sh + sh * tmp, 1. / sh);
+                if (ret <= (e + tmp))
+                    accept = true;
+            }
+        }
+        output[idx] = ret * sc;
+    }
+    else {  // shape=1
+        float u = *(uniform + idx);
+        (output + idx)[0] = -logf(u) * sc;
+    }
+}
+
 __global__ void _crt_level0(float alpha, unsigned int num, unsigned int rep, unsigned int* output, float* uniform) {
     __shared__ unsigned int result_local[nThreads_crt * crt_AR_worker_level0];
     size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -636,6 +721,26 @@ extern "C" void sample_gamma(float shape, float scale, void* sst, void* status, 
 //        _gamma_s1 << <grid, block, 0, stream >> > (shape, scale, _sst->output, _sst->meta_working, _sst->special_reserve, ((global_status*)status)->rand_status);
         _gamma_s1 << <grid, block, 0, stream >> > (shape, scale, _sst->output, _sst->meta_working, _sst->output, ((global_status*)status)->rand_status);
     }
+}
+
+extern "C" void sample_multi_gamma(float* shape_host, float* scale_host, void* sst, void* status, int repeat, cudaStream_t stream = 0) {
+    substorage* _sst = (substorage*)sst;
+    size_t matrix_scale = _sst->require / repeat;
+    float* shape, * scale;
+    int nBytes = matrix_scale * sizeof(float);
+    cudaMalloc((void**)&shape, nBytes);
+    cudaMalloc((void**)&scale, nBytes);
+
+    cudaMemcpy(shape, shape_host, nBytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(scale, scale_host, nBytes, cudaMemcpyHostToDevice);
+
+    require_normal_and_uniform(_sst, (global_status*)status);
+
+    dim3 grid(_sst->require / nThreads_gamma), block(nThreads_gamma);
+    _rand_gamma << <grid, block, 0, stream >> > (shape, scale, _sst->output, _sst->meta_working,_sst->special_reserve, matrix_scale,((global_status*)status)->rand_status);
+ 
+    cudaFree(shape);
+    cudaFree(scale);
 }
 
 extern "C" void sample_exponential(float inv_lambda, void* sst, void* status, cudaStream_t stream = 0) {
