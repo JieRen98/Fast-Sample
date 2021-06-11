@@ -4,6 +4,9 @@ A project that underlying code is completely based on CUDA C and it provides a s
 The document is being perfected.
 
 ## Useage
-Use `nvcc -Xcinouker -fPIC -shared -o kernel.so kernel.cu` to create the `so` library.
-
-Run `main.py`.
+```shell
+mkdir build
+cd build
+cmake ..
+make
+```
