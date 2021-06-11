@@ -8,7 +8,7 @@
 
 namespace FastSample {
     template<typename T>
-    storage<T>::storage(size_t capacity) {
+    storage<T>::storage(size_t capacity) : capacity(capacity) {
         cudaMalloc(&storage_0, capacity * sizeof(T));
         cudaMalloc(&storage_1, capacity * sizeof(T));
         cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);

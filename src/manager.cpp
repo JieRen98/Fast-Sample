@@ -7,10 +7,18 @@
 
 namespace FastSample {
     template<typename T>
-    manager<T>::manager(unsigned long long seed, int Status_Num, size_t capacity)
-    : storage_gaussian(capacity), storage_uniform(capacity) {
-        cudaMalloc(&rand_status, Status_Num * sizeof(curandStateXORWOW_t));
+    manager<T>::manager(unsigned long long seed)
+    : storage_normal(nCapacity), storage_uniform(nCapacity) {
+        cudaMalloc(&rand_status, nStatus * sizeof(curandStateXORWOW_t));
         Fill_Status(seed, rand_status);
+        Fill_Uniform(storage_uniform.storage_0);
+        Fill_Uniform(storage_uniform.storage_1);
+
+        Fill_Normal(storage_normal.storage_0);
+        Fill_Normal(storage_normal.storage_1);
+
+        cudaStreamSynchronize(storage_uniform.stream);
+        cudaStreamSynchronize(storage_normal.stream);
     }
 
     template<typename T>
